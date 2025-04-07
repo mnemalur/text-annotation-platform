@@ -1,0 +1,137 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model User {
+  id            String         @id @default(cuid())
+  name          String?
+  email         String        @unique
+  emailVerified DateTime?
+  image         String?
+  password      String?   // Added for credentials authentication
+  role          String      @default("ANNOTATOR")
+  accounts      Account[]
+  sessions      Session[]
+  projects      ProjectMember[]
+  annotations   Annotation[]
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  assignments   Assignment[]
+}
+
+model Project {
+  id                String         @id @default(cuid())
+  name              String
+  description       String?
+  isDoubleAnnotation Boolean      @default(false)
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  labels            Label[]
+  documents         Document[]
+  members           ProjectMember[]
+}
+
+model ProjectMember {
+  id        String    @id @default(cuid())
+  project   Project   @relation(fields: [projectId], references: [id])
+  projectId String
+  user      User      @relation(fields: [userId], references: [id])
+  userId    String
+  role      String
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@unique([projectId, userId])
+}
+
+model Label {
+  id          String       @id @default(cuid())
+  name        String
+  description String?
+  hotkey      String?
+  color       String
+  order       Int
+  project     Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId   String
+  annotations Annotation[]
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  @@unique([projectId, hotkey])
+}
+
+model Document {
+  id          String       @id @default(cuid())
+  title       String
+  content     String
+  project     Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId   String
+  status      String      @default("PENDING")
+  assignments Assignment[]
+  annotations Annotation[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+}
+
+model Assignment {
+  id          String           @id @default(cuid())
+  document    Document         @relation(fields: [documentId], references: [id])
+  documentId  String
+  annotator   User             @relation(fields: [annotatorId], references: [id])
+  annotatorId String
+  status      String          @default("PENDING")
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@unique([documentId, annotatorId])
+}
+
+model Annotation {
+  id          String     @id @default(cuid())
+  document    Document   @relation(fields: [documentId], references: [id])
+  documentId  String
+  label       Label      @relation(fields: [labelId], references: [id])
+  labelId     String
+  annotator   User       @relation(fields: [annotatorId], references: [id])
+  annotatorId String
+  startOffset Int
+  endOffset   Int
+  text        String
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+} 
