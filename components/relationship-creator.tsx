@@ -2,197 +2,205 @@
 
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Label } from "@/components/ui/label"
-import { useToast } from "@/components/ui/use-toast"
-import { ArrowRight, Plus, Trash, Eye } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 
-// Mock relationship types - in a real app this would come from a database or API
+interface Annotation {
+  id: string
+  text: string
+  range: {
+    start: number
+    end: number
+  }
+  tokenStart: number
+  tokenEnd: number
+  labelId: string
+  labelName: string
+  color: string
+}
+
+interface Relationship {
+  id: string
+  sourceId: string
+  targetId: string
+  type: string
+}
+
+interface RelationshipCreatorProps {
+  annotations: Annotation[]
+  relationships: Relationship[]
+  onAddRelationship: (relationship: Relationship) => void
+  isReviewMode: boolean
+}
+
+// Mock relationship types - in a real app these would come from your database
 const relationshipTypes = [
-  { id: "rel1", name: "is-a" },
-  { id: "rel2", name: "part-of" },
-  { id: "rel3", name: "located-in" },
-  { id: "rel4", name: "works-for" },
-  { id: "rel5", name: "created-by" },
+  "is employed by",
+  "is located in",
+  "is part of",
+  "owns",
+  "reports to",
+  "works with",
 ]
 
-export function RelationshipCreator({ annotations, relationships, onAddRelationship, isReviewMode = false }) {
-  const [sourceAnnotation, setSourceAnnotation] = useState("")
-  const [targetAnnotation, setTargetAnnotation] = useState("")
-  const [relationType, setRelationType] = useState("")
-  const { toast } = useToast()
+export function RelationshipCreator({
+  annotations,
+  relationships,
+  onAddRelationship,
+  isReviewMode,
+}: RelationshipCreatorProps) {
+  const [sourceId, setSourceId] = useState<string>("")
+  const [targetId, setTargetId] = useState<string>("")
+  const [relationType, setRelationType] = useState<string>("")
 
   const handleCreateRelationship = () => {
-    if (isReviewMode) {
-      toast({
-        title: "Review mode active",
-        description: "Switch to edit mode to add relationships",
-        variant: "destructive",
-      })
-      return
-    }
-
-    if (!sourceAnnotation || !targetAnnotation || !relationType) {
-      toast({
-        title: "Missing information",
-        description: "Please select source, target, and relationship type",
-        variant: "destructive",
-      })
-      return
-    }
-
-    const source = annotations.find((a) => a.id === sourceAnnotation)
-    const target = annotations.find((a) => a.id === targetAnnotation)
-    const type = relationshipTypes.find((r) => r.id === relationType)
-
-    if (source && target && type) {
-      const newRelationship = {
+    if (sourceId && targetId && relationType) {
+      onAddRelationship({
         id: `rel-${Date.now()}`,
-        sourceId: source.id,
-        sourceName: source.text,
-        sourceLabel: source.labelName,
-        targetId: target.id,
-        targetName: target.text,
-        targetLabel: target.labelName,
-        typeId: type.id,
-        typeName: type.name,
-      }
-
-      onAddRelationship(newRelationship)
-
-      toast({
-        title: "Relationship created",
-        description: `Created "${type.name}" relationship between "${source.text}" and "${target.text}"`,
+        sourceId,
+        targetId,
+        type: relationType,
       })
-
-      // Reset form
-      setSourceAnnotation("")
-      setTargetAnnotation("")
+      setSourceId("")
+      setTargetId("")
       setRelationType("")
     }
   }
 
-  const handleDeleteRelationship = (relationshipId) => {
-    if (isReviewMode) {
-      toast({
-        title: "Review mode active",
-        description: "Switch to edit mode to delete relationships",
-        variant: "destructive",
-      })
-      return
-    }
-
-    // In a real app, this would update the state or call an API
-    toast({
-      title: "Relationship deleted",
-      description: "The relationship has been removed",
-    })
-  }
-
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {isReviewMode && (
-        <Alert className="mb-4 bg-yellow-50 border-yellow-200">
-          <AlertDescription className="text-sm flex items-center">
-            <Eye className="mr-2 h-4 w-4" />
-            Review mode active. Switch to edit mode to modify relationships.
+        <Alert>
+          <AlertDescription>
+            Review mode is active. You cannot add new relationships.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {annotations.length < 2 && !isReviewMode && (
+        <Alert>
+          <AlertDescription>
+            You need at least two annotations to create relationships.
           </AlertDescription>
         </Alert>
       )}
 
       <div className="space-y-4">
-        <h3 className="text-lg font-medium">Create Relationship</h3>
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
-          <div className="space-y-2 md:col-span-2">
-            <Label htmlFor="source">Source</Label>
-            <Select value={sourceAnnotation} onValueChange={setSourceAnnotation} disabled={isReviewMode}>
-              <SelectTrigger id="source">
-                <SelectValue placeholder="Select source" />
-              </SelectTrigger>
-              <SelectContent>
-                {annotations.map((annotation) => (
-                  <SelectItem key={annotation.id} value={annotation.id}>
-                    {annotation.text} ({annotation.labelName})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="relationship">Relationship</Label>
-            <Select value={relationType} onValueChange={setRelationType} disabled={isReviewMode}>
-              <SelectTrigger id="relationship">
-                <SelectValue placeholder="Type" />
-              </SelectTrigger>
-              <SelectContent>
-                {relationshipTypes.map((type) => (
-                  <SelectItem key={type.id} value={type.id}>
-                    {type.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2 md:col-span-2">
-            <Label htmlFor="target">Target</Label>
-            <Select value={targetAnnotation} onValueChange={setTargetAnnotation} disabled={isReviewMode}>
-              <SelectTrigger id="target">
-                <SelectValue placeholder="Select target" />
-              </SelectTrigger>
-              <SelectContent>
-                {annotations.map((annotation) => (
-                  <SelectItem key={annotation.id} value={annotation.id}>
-                    {annotation.text} ({annotation.labelName})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <Button onClick={handleCreateRelationship} disabled={isReviewMode}>
-            <Plus className="mr-2 h-4 w-4" /> Add
-          </Button>
+        <div className="space-y-2">
+          <Select
+            value={sourceId}
+            onValueChange={setSourceId}
+            disabled={isReviewMode || annotations.length < 2}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Select source annotation" />
+            </SelectTrigger>
+            <SelectContent>
+              {annotations.map((annotation) => (
+                <SelectItem key={annotation.id} value={annotation.id}>
+                  <span className="flex items-center gap-2">
+                    <span
+                      className="h-2 w-2 rounded-full"
+                      style={{ backgroundColor: annotation.color }}
+                    />
+                    <span>
+                      {annotation.text} ({annotation.labelName})
+                    </span>
+                  </span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
+
+        <div className="space-y-2">
+          <Select
+            value={relationType}
+            onValueChange={setRelationType}
+            disabled={isReviewMode || !sourceId}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Select relationship type" />
+            </SelectTrigger>
+            <SelectContent>
+              {relationshipTypes.map((type) => (
+                <SelectItem key={type} value={type}>
+                  {type}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="space-y-2">
+          <Select
+            value={targetId}
+            onValueChange={setTargetId}
+            disabled={isReviewMode || !sourceId || !relationType}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Select target annotation" />
+            </SelectTrigger>
+            <SelectContent>
+              {annotations
+                .filter((a) => a.id !== sourceId)
+                .map((annotation) => (
+                  <SelectItem key={annotation.id} value={annotation.id}>
+                    <span className="flex items-center gap-2">
+                      <span
+                        className="h-2 w-2 rounded-full"
+                        style={{ backgroundColor: annotation.color }}
+                      />
+                      <span>
+                        {annotation.text} ({annotation.labelName})
+                      </span>
+                    </span>
+                  </SelectItem>
+                ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <Button
+          className="w-full"
+          disabled={isReviewMode || !sourceId || !targetId || !relationType}
+          onClick={handleCreateRelationship}
+        >
+          Create Relationship
+        </Button>
       </div>
 
-      <div className="space-y-4">
-        <h3 className="text-lg font-medium">Existing Relationships</h3>
-        {relationships.length > 0 ? (
-          <div className="space-y-2">
-            {relationships.map((rel) => (
-              <Card key={rel.id}>
-                <CardContent className="p-4 flex items-center justify-between">
-                  <div className="flex items-center">
-                    <div className="font-medium">{rel.sourceName}</div>
-                    <div className="text-xs text-muted-foreground mx-1">({rel.sourceLabel})</div>
-                    <ArrowRight className="mx-2 h-4 w-4" />
-                    <div className="text-sm font-medium">{rel.typeName}</div>
-                    <ArrowRight className="mx-2 h-4 w-4" />
-                    <div className="font-medium">{rel.targetName}</div>
-                    <div className="text-xs text-muted-foreground mx-1">({rel.targetLabel})</div>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => handleDeleteRelationship(rel.id)}
-                    disabled={isReviewMode}
-                  >
-                    <Trash className="h-4 w-4" />
-                  </Button>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        ) : (
-          <p className="text-sm text-muted-foreground text-center py-4">
-            No relationships created yet. Create one using the form above.
-          </p>
-        )}
-      </div>
+      <ScrollArea className="h-[calc(100vh-25rem)]">
+        <div className="space-y-2">
+          {relationships.map((rel) => {
+            const source = annotations.find((a) => a.id === rel.sourceId)
+            const target = annotations.find((a) => a.id === rel.targetId)
+            if (!source || !target) return null
+
+            return (
+              <div
+                key={rel.id}
+                className="rounded-lg border bg-card p-3 text-card-foreground shadow-sm"
+              >
+                <div className="flex items-center gap-2 text-sm">
+                  <span
+                    className="h-2 w-2 rounded-full"
+                    style={{ backgroundColor: source.color }}
+                  />
+                  <span className="font-medium">{source.text}</span>
+                  <span className="text-muted-foreground">{rel.type}</span>
+                  <span
+                    className="h-2 w-2 rounded-full"
+                    style={{ backgroundColor: target.color }}
+                  />
+                  <span className="font-medium">{target.text}</span>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </ScrollArea>
     </div>
   )
 }

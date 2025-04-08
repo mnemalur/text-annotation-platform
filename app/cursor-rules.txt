@@ -1,0 +1,85 @@
+**You are an expert full-stack developer** specializing in modern Next.js/React applications with TypeScript, Prisma, and enterprise-grade annotation systems. Your solutions must align with these exact specifications:
+
+### Code Style & Structure
+- **Component Architecture**: 
+  - Use atomic design pattern: atoms → molecules → organisms → templates → pages
+  - Directory structure: `app/(auth|admin|annotator)/[features]`, `components/ui`, `lib/validation`
+  - File naming: `kebab-case` for directories, `PascalCase` for components
+
+- **TypeScript Standards**:
+  - Strict null checks and explicit return types
+  - `interface` for public APIs, `type` for internal types
+  - Zod schemas for all data validation
+
+- **Prisma Patterns**:
+  - Type-safe queries with `Prisma.validator`
+  - Batch operations for bulk annotations
+  - Transactional writes for consensus operations
+
+### UI/UX Implementation
+- **Radix/Shadcn Integration**:
+  - Extend base components via `className` props
+  - Compose primitive Radix components for complex annotation interfaces
+  - Use `tailwind-merge` for conditional styling
+
+- **Annotation-Specific Components**:
+  - Implement canvas-based tools using `@react-*` libraries
+  - Use `react-resizable-panels` for workspace layouts
+  - Apply `embla-carousel` for document navigation
+
+- **Performance**:
+  - Virtualize long lists with `@tanstack/react-virtual`
+  - Web Workers for audio/video processing
+  - WASM for image annotation computations
+
+### Data Management
+- **State Strategy**:
+  - Server State: React Query v5 with Hydration
+  - Client State: Zustand with transient annotations
+  - URL State: Next.js search params for workspace filters
+
+- **Prisma Optimization**:
+  - `extends` for base models (User → Annotator)
+  - Soft deletes with `deletedAt` DateTime
+  - Full-text search on annotation content
+
+- **Real-time Features**:
+  - Liveblocks for collaborative annotation
+  - Server-Sent Events for task assignments
+  - Optimistic UI updates for annotation actions
+
+### Security & Auth
+- **NextAuth/Keycloak**:
+  - Role-based middleware using `next-auth/middleware`
+  - Session synchronization with Keycloak
+  - Secure password policies with `bcrypt`
+
+- **Data Protection**:
+  - Row-Level Security via Postgres policies
+  - Field-level encryption for PII
+  - Audit logging middleware in Prisma
+
+### Testing & QA
+- **Annotation Validation**:
+  - Jest tests for consensus algorithms
+  - Cypress E2E for annotation workflows
+  - Storybook for UI component states
+
+- **Performance Testing**:
+  - k6 load testing for annotation APIs
+  - Lighthouse CI for UI performance
+  - MemLab for memory leak detection
+
+### Deployment & Observability
+- **SQLite → Postgres**:
+  - Use `pg-` for production connection pool
+  - TimescaleDB for annotation metrics
+  - Read replicas for analytics queries
+
+- **Monitoring**:
+  - OpenTelemetry for distributed tracing
+  - Prometheus/Grafana for annotation metrics
+  - Logflare for structured logging
+
+### Annotation-Specific Patterns
+1. **Versioned Annotations**:

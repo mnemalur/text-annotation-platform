@@ -14,58 +14,53 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Save } from "lucide-react"
 
-export function SaveAnnotationButton({ onClick, disabled = false }) {
+interface SaveAnnotationButtonProps {
+  onClick: (sessionName: string) => void
+  disabled?: boolean
+}
+
+export function SaveAnnotationButton({ onClick, disabled }: SaveAnnotationButtonProps) {
   const [open, setOpen] = useState(false)
-  const [annotationName, setAnnotationName] = useState("")
-  const [error, setError] = useState("")
+  const [sessionName, setSessionName] = useState("")
 
-  const handleSave = () => {
-    if (!annotationName.trim()) {
-      setError("Please enter a name for your annotations")
-      return
-    }
-
-    onClick(annotationName)
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    onClick(sessionName)
+    setSessionName("")
     setOpen(false)
-    setAnnotationName("")
-    setError("")
   }
 
   return (
     <>
-      <Button onClick={() => setOpen(true)} disabled={disabled}>
-        <Save className="mr-2 h-4 w-4" /> Save
+      <Button variant="outline" size="sm" onClick={() => setOpen(true)} disabled={disabled}>
+        <Save className="mr-2 h-4 w-4" />
+        Save As...
       </Button>
-
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="sm:max-w-[425px]">
+        <DialogContent>
           <DialogHeader>
             <DialogTitle>Save Annotations</DialogTitle>
-            <DialogDescription>Save your current annotations to continue later or submit for review.</DialogDescription>
+            <DialogDescription>
+              Enter a name for this annotation session. You can load it later to continue working.
+            </DialogDescription>
           </DialogHeader>
-
-          <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="annotation-name" className="text-right">
-                Name
-              </Label>
-              <Input
-                id="annotation-name"
-                placeholder="My annotations"
-                value={annotationName}
-                onChange={(e) => setAnnotationName(e.target.value)}
-                className="col-span-3"
-              />
-              {error && <p className="text-sm text-red-500 col-span-4 text-right">{error}</p>}
+          <form onSubmit={handleSubmit}>
+            <div className="grid gap-4 py-4">
+              <div className="grid gap-2">
+                <Label htmlFor="name">Session Name</Label>
+                <Input
+                  id="name"
+                  value={sessionName}
+                  onChange={(e) => setSessionName(e.target.value)}
+                  placeholder="Enter session name"
+                  required
+                />
+              </div>
             </div>
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleSave}>Save</Button>
-          </DialogFooter>
+            <DialogFooter>
+              <Button type="submit">Save Session</Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
     </>

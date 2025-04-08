@@ -10,8 +10,7 @@ const nextConfig = {
     unoptimized: true,
   },
   experimental: {
-    // Enable SWC minification
-    swcMinify: true,
+    // Remove swcMinify as it's not compatible with Turbopack
     // Other experimental features
     webpackBuildWorker: true,
   },

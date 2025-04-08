@@ -15,8 +15,53 @@ import { Input } from "@/components/ui/input"
 import { Search, Clock, FileText } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
+import { formatDistanceToNow } from "date-fns"
 
-export function LoadAnnotationsDialog({ open, onOpenChange, savedSessions, onLoadSession, currentDocumentId }) {
+interface Annotation {
+  id: string
+  text: string
+  range: {
+    start: number
+    end: number
+  }
+  tokenStart: number
+  tokenEnd: number
+  labelId: string
+  labelName: string
+  color: string
+}
+
+interface Relationship {
+  id: string
+  sourceId: string
+  targetId: string
+  type: string
+}
+
+interface Session {
+  id: string
+  name: string
+  date: string
+  documentId: string
+  annotations: Annotation[]
+  relationships: Relationship[]
+}
+
+interface LoadAnnotationsDialogProps {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  savedSessions: Session[]
+  onLoadSession: (sessionId: string) => void
+  currentDocumentId: string
+}
+
+export function LoadAnnotationsDialog({
+  open,
+  onOpenChange,
+  savedSessions,
+  onLoadSession,
+  currentDocumentId,
+}: LoadAnnotationsDialogProps) {
   const [searchQuery, setSearchQuery] = useState("")
   const [activeTab, setActiveTab] = useState("current")
 
@@ -38,6 +83,8 @@ export function LoadAnnotationsDialog({ open, onOpenChange, savedSessions, onLoa
     const matchesTab = activeTab === "all" || (activeTab === "current" && session.documentId === currentDocumentId)
     return matchesSearch && matchesTab
   })
+
+  const currentDocumentSessions = savedSessions.filter((s) => s.documentId === currentDocumentId)
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -66,9 +113,9 @@ export function LoadAnnotationsDialog({ open, onOpenChange, savedSessions, onLoa
 
             <TabsContent value="current" className="mt-2">
               <ScrollArea className="h-[300px]">
-                {filteredSessions.length > 0 ? (
+                {currentDocumentSessions.length > 0 ? (
                   <div className="space-y-2">
-                    {filteredSessions.map((session) => (
+                    {currentDocumentSessions.map((session) => (
                       <div
                         key={session.id}
                         className="p-3 border rounded-md hover:bg-muted cursor-pointer"
@@ -79,7 +126,7 @@ export function LoadAnnotationsDialog({ open, onOpenChange, savedSessions, onLoa
                             <h3 className="font-medium">{session.name}</h3>
                             <div className="flex items-center text-sm text-muted-foreground mt-1">
                               <Clock className="mr-1 h-3 w-3" />
-                              <span>{formatDate(session.date)}</span>
+                              <span>{formatDistanceToNow(new Date(session.date), { addSuffix: true })}</span>
                             </div>
                           </div>
                           <Badge>{session.annotations.length} annotations</Badge>

@@ -29,7 +29,7 @@ const mockProjects = [
   { id: "proj2", name: "News Articles", description: "Identifying entities and events in news articles" },
 ]
 
-export function ProjectSelector() {
+export default function ProjectSelector() {
   const [selectedProject, setSelectedProject] = useState(mockProjects[0])
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [newProjectName, setNewProjectName] = useState("")

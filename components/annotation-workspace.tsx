@@ -1,19 +1,24 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback, useMemo } from "react"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
+import { Card } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Separator } from "@/components/ui/separator"
-import { LabelSelector } from "@/components/label-selector"
-import { TextDocument } from "@/components/text-document"
+import LabelSelector from "@/components/label-selector"
+import TextDocument from "@/components/text-document"
 import { RelationshipCreator } from "@/components/relationship-creator"
 import { SaveAnnotationButton } from "@/components/save-annotation-button"
 import { LoadAnnotationsDialog } from "@/components/load-annotations-dialog"
 import { useToast } from "@/components/ui/use-toast"
-import { ChevronLeft, ChevronRight, Save, Upload, Undo, Eye, Edit, RotateCcw, CheckCircle } from "lucide-react"
+import { ChevronLeft, ChevronRight, Save, Upload, Undo, Eye, Edit, RotateCcw, CheckCircle, EyeOff, SkipForward, Timer } from "lucide-react"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
+import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable"
+import { Annotation, Relationship, Session } from "@/types/annotation"
+import { Label as LabelType } from "@/types/annotation"
+import { Progress } from "@/components/ui/progress"
+import { v4 as uuidv4 } from "uuid"
 
 // Mock data - in a real app this would come from a database or API
 const mockDocuments = [
@@ -109,19 +114,32 @@ const mockSavedSessions = [
   },
 ]
 
-export function AnnotationWorkspace() {
+interface TextRange {
+  start: number
+  end: number
+}
+
+export default function AnnotationWorkspace() {
   const [currentDocIndex, setCurrentDocIndex] = useState(0)
-  const [annotations, setAnnotations] = useState([])
-  const [relationships, setRelationships] = useState([])
+  const [annotations, setAnnotations] = useState<Annotation[]>([])
+  const [relationships, setRelationships] = useState<Relationship[]>([])
   const [selectedTab, setSelectedTab] = useState("document")
-  const [selectedText, setSelectedText] = useState(null)
+  const [selectedText, setSelectedText] = useState<string | null>(null)
+  const [selectedRange, setSelectedRange] = useState<TextRange | null>(null)
+  const [selectedLabelId, setSelectedLabelId] = useState<string | null>(null)
   const [isLoadDialogOpen, setIsLoadDialogOpen] = useState(false)
-  const [savedSessions, setSavedSessions] = useState(mockSavedSessions)
+  const [savedSessions, setSavedSessions] = useState<Session[]>(mockSavedSessions)
   const [isReviewMode, setIsReviewMode] = useState(false)
+  const [timeRemaining, setTimeRemaining] = useState(300) // 5 minutes in seconds
+  const [isTimerPaused, setIsTimerPaused] = useState(false)
 
   // For undo functionality
-  const [annotationHistory, setAnnotationHistory] = useState([])
-  const [lastSavedState, setLastSavedState] = useState(null)
+  const [annotationHistory, setAnnotationHistory] = useState<Annotation[][]>([])
+  const [relationshipHistory, setRelationshipHistory] = useState<Relationship[][]>([])
+  const [lastSavedState, setLastSavedState] = useState<{
+    annotations: Annotation[]
+    relationships: Relationship[]
+  } | null>(null)
 
   const { toast } = useToast()
 
@@ -130,8 +148,26 @@ export function AnnotationWorkspace() {
   // Initialize or reset the annotation history when changing documents
   useEffect(() => {
     setAnnotationHistory([])
+    setRelationshipHistory([])
     setLastSavedState(null)
   }, [currentDocIndex])
+
+  // Timer effect
+  useEffect(() => {
+    if (timeRemaining > 0 && !isTimerPaused) {
+      const timer = setInterval(() => {
+        setTimeRemaining(prev => prev - 1)
+      }, 1000)
+
+      return () => clearInterval(timer)
+    } else if (timeRemaining === 0) {
+      toast({
+        title: "Time's up!",
+        description: "Please save or skip this document.",
+        variant: "destructive",
+      })
+    }
+  }, [timeRemaining, isTimerPaused])
 
   const handlePrevDocument = () => {
     if (currentDocIndex > 0) {
@@ -140,6 +176,8 @@ export function AnnotationWorkspace() {
       setAnnotations([])
       setRelationships([])
       setSelectedText(null)
+      setSelectedRange(null)
+      setSelectedLabelId(null)
     }
   }
 
@@ -150,65 +188,58 @@ export function AnnotationWorkspace() {
       setAnnotations([])
       setRelationships([])
       setSelectedText(null)
+      setSelectedRange(null)
+      setSelectedLabelId(null)
     }
   }
 
-  const handleTextSelection = (text, range) => {
-    if (!isReviewMode) {
-      setSelectedText({ text, range })
-    }
+  // Memoize handlers
+  const handleTextSelection = (text: string, range: TextRange, tokenStart: number, tokenEnd: number) => {
+    setSelectedText(text)
+    setSelectedRange(range)
+    setSelectedLabelId(null) // Reset selected label when new text is selected
   }
 
-  const handleLabelSelect = (label) => {
-    if (selectedText && !isReviewMode) {
-      // Save current state to history before making changes
-      setAnnotationHistory([...annotationHistory, [...annotations]])
-
-      const newAnnotation = {
-        id: `annotation-${Date.now()}`,
-        text: selectedText.text,
-        range: selectedText.range,
-        tokenStart: selectedText.tokenStart,
-        tokenEnd: selectedText.tokenEnd,
+  const handleLabelSelect = (label: LabelType) => {
+    if (selectedText && selectedRange) {
+      const annotation: Annotation = {
+        id: Math.random().toString(36).substring(2, 15),
+        text: selectedText,
+        range: selectedRange,
         labelId: label.id,
         labelName: label.name,
         color: label.color,
+        tokenStart: selectedRange.start,
+        tokenEnd: selectedRange.end
       }
+      setAnnotations([...annotations, annotation])
+      setSelectedText(null)
+      setSelectedRange(null)
+      setSelectedLabelId(label.id)
 
-      setAnnotations([...annotations, newAnnotation])
-
+      // Show success message
       toast({
         title: "Text annotated",
-        description: `"${selectedText.text}" labeled as "${label.name}"`,
-      })
-
-      // Clear the selection
-      setSelectedText(null)
-      window.getSelection().removeAllRanges()
-    } else if (isReviewMode) {
-      toast({
-        title: "Review mode active",
-        description: "Switch to edit mode to add new annotations",
-        variant: "destructive",
-      })
-    } else {
-      toast({
-        title: "No text selected",
-        description: "Please select some text before choosing a label",
-        variant: "destructive",
+        description: `"${selectedText}" labeled as "${label.name}"`,
       })
     }
   }
 
-  const handleAddRelationship = (relationship) => {
-    // Save current state to history before making changes
-    setAnnotationHistory([...annotationHistory, [...relationships]])
-    setRelationships([...relationships, relationship])
-  }
+  // Memoize filtered relationships
+  const filteredRelationships = useMemo(() => {
+    return relationships.filter(rel => 
+      annotations.some(a => a.id === rel.sourceId) && 
+      annotations.some(a => a.id === rel.targetId)
+    )
+  }, [relationships, annotations])
 
-  const handleSaveAnnotations = (sessionName) => {
-    // Create a new session object
-    const newSession = {
+  const handleAddRelationship = useCallback((relationship: Relationship) => {
+    setRelationshipHistory(prev => [...prev, [...relationships]])
+    setRelationships(prev => [...prev, relationship])
+  }, [relationships])
+
+  const handleSaveAnnotations = (sessionName: string) => {
+    const newSession: Session = {
       id: `session-${Date.now()}`,
       name: sessionName,
       date: new Date().toISOString(),
@@ -217,11 +248,7 @@ export function AnnotationWorkspace() {
       relationships: [...relationships],
     }
 
-    // In a real app, this would save to a database or API
-    // For now, we'll just add it to our mock saved sessions
     setSavedSessions([...savedSessions, newSession])
-
-    // Save the current state as the last saved state
     setLastSavedState({
       annotations: [...annotations],
       relationships: [...relationships],
@@ -232,7 +259,6 @@ export function AnnotationWorkspace() {
       description: `Saved ${annotations.length} annotations and ${relationships.length} relationships as "${sessionName}"`,
     })
 
-    // In a real app, you might want to download the annotations as JSON
     const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(newSession))
     const downloadAnchorNode = document.createElement("a")
     downloadAnchorNode.setAttribute("href", dataStr)
@@ -242,32 +268,16 @@ export function AnnotationWorkspace() {
     downloadAnchorNode.remove()
   }
 
-  const handleLoadAnnotations = (sessionId) => {
+  const handleLoadSession = (sessionId: string) => {
     const session = savedSessions.find((s) => s.id === sessionId)
     if (session) {
-      // Find the document index
-      const docIndex = mockDocuments.findIndex((d) => d.id === session.documentId)
-      if (docIndex !== -1) {
-        // Save current state to history before loading
-        setAnnotationHistory([...annotationHistory, [...annotations]])
-
-        setCurrentDocIndex(docIndex)
-        setAnnotations(session.annotations)
-        setRelationships(session.relationships)
-
-        // Set this as the last saved state
-        setLastSavedState({
-          annotations: [...session.annotations],
-          relationships: [...session.relationships],
-        })
-
-        toast({
-          title: "Annotations loaded",
-          description: `Loaded ${session.annotations.length} annotations and ${session.relationships.length} relationships from "${session.name}"`,
-        })
-
-        setIsLoadDialogOpen(false)
-      }
+      setAnnotations(session.annotations)
+      setRelationships(session.relationships)
+      setIsLoadDialogOpen(false)
+      toast({
+        title: "Annotations loaded",
+        description: `Loaded ${session.annotations.length} annotations and ${session.relationships.length} relationships`,
+      })
     }
   }
 
@@ -349,24 +359,6 @@ export function AnnotationWorkspace() {
     }
   }
 
-  // Toggle between edit and review modes
-  const handleToggleReviewMode = () => {
-    setIsReviewMode(!isReviewMode)
-    setSelectedText(null)
-
-    if (!isReviewMode) {
-      toast({
-        title: "Review mode activated",
-        description: "You can now review all annotations without making changes",
-      })
-    } else {
-      toast({
-        title: "Edit mode activated",
-        description: "You can now make changes to annotations",
-      })
-    }
-  }
-
   // Quick save current state
   const handleQuickSave = () => {
     // Save the current state as the last saved state
@@ -382,7 +374,7 @@ export function AnnotationWorkspace() {
   }
 
   // Remove a specific annotation
-  const handleRemoveAnnotation = (annotationId) => {
+  const handleRemoveAnnotation = (annotationId: string) => {
     if (isReviewMode) {
       toast({
         title: "Review mode active",
@@ -405,120 +397,144 @@ export function AnnotationWorkspace() {
     })
   }
 
+  const formatTime = (seconds: number) => {
+    const minutes = Math.floor(seconds / 60)
+    const remainingSeconds = seconds % 60
+    return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}'`
+  }
+
+  const handleSkipDocument = () => {
+    handleNextDocument()
+    setTimeRemaining(300) // Reset timer
+    toast({
+      title: "Document skipped",
+      description: "Moving to next document",
+    })
+  }
+
   return (
-    <div className="flex flex-col space-y-4">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-2">
-          <Button variant="outline" size="icon" onClick={handlePrevDocument} disabled={currentDocIndex === 0}>
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          <span className="text-sm">
-            Document {currentDocIndex + 1} of {mockDocuments.length}
-          </span>
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={handleNextDocument}
-            disabled={currentDocIndex === mockDocuments.length - 1}
-          >
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-        </div>
-        <div className="flex items-center space-x-4">
-          <div className="flex items-center space-x-2">
-            <Switch id="review-mode" checked={isReviewMode} onCheckedChange={handleToggleReviewMode} />
-            <Label htmlFor="review-mode" className="text-sm">
-              {isReviewMode ? (
-                <span className="flex items-center">
-                  <Eye className="mr-1 h-4 w-4" /> Review Mode
+    <ResizablePanelGroup direction="horizontal" className="h-full">
+      <ResizablePanel defaultSize={70} minSize={50}>
+        <Card className="h-full p-4">
+          <div className="flex flex-col h-full">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center space-x-2">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={handlePrevDocument}
+                  disabled={currentDocIndex === 0}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <span className="text-sm font-medium">
+                  Document {currentDocIndex + 1} of {mockDocuments.length}
                 </span>
-              ) : (
-                <span className="flex items-center">
-                  <Edit className="mr-1 h-4 w-4" /> Edit Mode
-                </span>
-              )}
-            </Label>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={handleNextDocument}
+                  disabled={currentDocIndex === mockDocuments.length - 1}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <Timer className="h-4 w-4" />
+                  <span className="text-sm font-medium">{formatTime(timeRemaining)}</span>
+                  <Progress value={(timeRemaining / 300) * 100} className="w-24" />
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsTimerPaused(!isTimerPaused)}
+                >
+                  {isTimerPaused ? "Resume" : "Pause"}
+                </Button>
+              </div>
+
+              <div className="flex items-center space-x-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleUndo}
+                  disabled={annotationHistory.length === 0}
+                >
+                  <Undo className="h-4 w-4 mr-1" />
+                  Undo
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsReviewMode(!isReviewMode)}
+                >
+                  {isReviewMode ? (
+                    <>
+                      <Edit className="h-4 w-4 mr-1" />
+                      Edit
+                    </>
+                  ) : (
+                    <>
+                      <Eye className="h-4 w-4 mr-1" />
+                      Review
+                    </>
+                  )}
+                </Button>
+                <SaveAnnotationButton onClick={handleSaveAnnotations} />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleSkipDocument}
+                >
+                  <SkipForward className="h-4 w-4 mr-1" />
+                  Skip
+                </Button>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-auto">
+              <TextDocument
+                content={currentDocument.content}
+                annotations={annotations}
+                onTextSelect={handleTextSelection}
+                isReviewMode={isReviewMode}
+                onRemoveAnnotation={handleRemoveAnnotation}
+                className="min-h-[600px] text-base leading-relaxed"
+              />
+            </div>
           </div>
-        </div>
-      </div>
-
-      <div className="flex items-center justify-between">
-        <div className="flex space-x-2">
-          <Button variant="outline" onClick={handleUndo} disabled={annotationHistory.length === 0}>
-            <Undo className="mr-2 h-4 w-4" /> Undo
-          </Button>
-          <Button variant="outline" onClick={handleRevert} disabled={!lastSavedState}>
-            <RotateCcw className="mr-2 h-4 w-4" /> Revert
-          </Button>
-          <Button variant="outline" onClick={handleQuickSave} disabled={annotations.length === 0}>
-            <CheckCircle className="mr-2 h-4 w-4" /> Save State
-          </Button>
-        </div>
-        <div className="flex space-x-2">
-          <Button variant="outline" onClick={() => setIsLoadDialogOpen(true)}>
-            <Upload className="mr-2 h-4 w-4" /> Load
-          </Button>
-          <Button variant="outline" onClick={handleExportAnnotations} disabled={annotations.length === 0}>
-            <Save className="mr-2 h-4 w-4" /> Export
-          </Button>
-          <SaveAnnotationButton onClick={handleSaveAnnotations} disabled={annotations.length === 0} />
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <div className="md:col-span-3">
-          <Tabs value={selectedTab} onValueChange={setSelectedTab}>
-            <TabsList>
-              <TabsTrigger value="document">Document</TabsTrigger>
-              <TabsTrigger value="relationships">Relationships</TabsTrigger>
+        </Card>
+      </ResizablePanel>
+      <ResizableHandle />
+      <ResizablePanel defaultSize={30} minSize={25}>
+        <div className="h-full flex flex-col">
+          <Tabs defaultValue="labels" className="flex-1">
+            <TabsList className="w-full">
+              <TabsTrigger value="labels" className="flex-1">Labels</TabsTrigger>
+              <TabsTrigger value="relationships" className="flex-1">Relationships</TabsTrigger>
             </TabsList>
-            <TabsContent value="document" className="mt-4">
-              <Card>
-                <CardContent className="p-4">
-                  <h2 className="text-xl font-semibold mb-2">{currentDocument.title}</h2>
-                  <Separator className="my-2" />
-                  <TextDocument
-                    content={currentDocument.content}
-                    annotations={annotations}
-                    onTextSelect={handleTextSelection}
-                    selectedText={selectedText}
-                    isReviewMode={isReviewMode}
-                    onRemoveAnnotation={handleRemoveAnnotation}
-                  />
-                </CardContent>
-              </Card>
+            <TabsContent value="labels" className="flex-1">
+              <LabelSelector
+                onLabelSelect={handleLabelSelect}
+                isReviewMode={isReviewMode}
+                selectedText={selectedText}
+                selectedLabelId={selectedLabelId}
+              />
             </TabsContent>
-            <TabsContent value="relationships" className="mt-4">
-              <Card>
-                <CardContent className="p-4">
-                  <RelationshipCreator
-                    annotations={annotations}
-                    relationships={relationships}
-                    onAddRelationship={handleAddRelationship}
-                    isReviewMode={isReviewMode}
-                  />
-                </CardContent>
-              </Card>
+            <TabsContent value="relationships" className="flex-1">
+              <RelationshipCreator
+                annotations={annotations}
+                relationships={relationships}
+                onAddRelationship={handleAddRelationship}
+                isReviewMode={isReviewMode}
+              />
             </TabsContent>
           </Tabs>
         </div>
-        <div>
-          <LabelSelector
-            onSelectLabel={handleLabelSelect}
-            isTextSelected={!!selectedText}
-            isReviewMode={isReviewMode}
-          />
-        </div>
-      </div>
-
-      <LoadAnnotationsDialog
-        open={isLoadDialogOpen}
-        onOpenChange={setIsLoadDialogOpen}
-        savedSessions={savedSessions}
-        onLoadSession={handleLoadAnnotations}
-        currentDocumentId={currentDocument.id}
-      />
-    </div>
+      </ResizablePanel>
+    </ResizablePanelGroup>
   )
 }
 

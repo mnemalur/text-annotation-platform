@@ -8,11 +8,18 @@ import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { useToast } from "@/components/ui/use-toast"
-import { CreateLabelDialog } from "@/components/create-label-dialog"
+import CreateLabelDialog from "@/components/create-label-dialog"
 import { Edit, Plus, Save, Trash } from "lucide-react"
+import { Label as LabelType } from "@/types/annotation"
+
+interface RelationshipType {
+  id: string
+  name: string
+  description: string
+}
 
 // Mock data - in a real app this would come from a database or API
-const mockLabels = [
+const mockLabels: LabelType[] = [
   { id: "label1", name: "Person", color: "#FF5733", description: "Human individuals" },
   { id: "label2", name: "Organization", color: "#33A8FF", description: "Companies, agencies, institutions" },
   { id: "label3", name: "Location", color: "#33FF57", description: "Physical locations" },
@@ -20,7 +27,7 @@ const mockLabels = [
   { id: "label5", name: "Product", color: "#FF33A8", description: "Commercial products" },
 ]
 
-const mockRelationshipTypes = [
+const mockRelationshipTypes: RelationshipType[] = [
   { id: "rel1", name: "is-a", description: "Indicates that one entity is a type of another" },
   { id: "rel2", name: "part-of", description: "Indicates that one entity is a component of another" },
   { id: "rel3", name: "located-in", description: "Indicates that one entity is physically located within another" },
@@ -29,16 +36,16 @@ const mockRelationshipTypes = [
 ]
 
 export function LabelManagement() {
-  const [labels, setLabels] = useState(mockLabels)
-  const [relationshipTypes, setRelationshipTypes] = useState(mockRelationshipTypes)
+  const [labels, setLabels] = useState<LabelType[]>(mockLabels)
+  const [relationshipTypes, setRelationshipTypes] = useState<RelationshipType[]>(mockRelationshipTypes)
   const [isCreateLabelDialogOpen, setIsCreateLabelDialogOpen] = useState(false)
-  const [editingLabelId, setEditingLabelId] = useState(null)
-  const [editingRelationshipId, setEditingRelationshipId] = useState(null)
+  const [editingLabelId, setEditingLabelId] = useState<string | null>(null)
+  const [editingRelationshipId, setEditingRelationshipId] = useState<string | null>(null)
   const [newRelationshipName, setNewRelationshipName] = useState("")
   const [newRelationshipDescription, setNewRelationshipDescription] = useState("")
   const { toast } = useToast()
 
-  const handleAddLabel = (newLabel) => {
+  const handleAddLabel = (newLabel: LabelType) => {
     setLabels([...labels, { ...newLabel, id: `label-${Date.now()}` }])
     setIsCreateLabelDialogOpen(false)
 
@@ -48,7 +55,7 @@ export function LabelManagement() {
     })
   }
 
-  const handleUpdateLabel = (id, updatedData) => {
+  const handleUpdateLabel = (id: string, updatedData: Partial<LabelType>) => {
     setLabels(labels.map((label) => (label.id === id ? { ...label, ...updatedData } : label)))
     setEditingLabelId(null)
 
@@ -58,7 +65,7 @@ export function LabelManagement() {
     })
   }
 
-  const handleDeleteLabel = (id) => {
+  const handleDeleteLabel = (id: string) => {
     setLabels(labels.filter((label) => label.id !== id))
 
     toast({
@@ -77,7 +84,7 @@ export function LabelManagement() {
       return
     }
 
-    const newRelationship = {
+    const newRelationship: RelationshipType = {
       id: `rel-${Date.now()}`,
       name: newRelationshipName,
       description: newRelationshipDescription,
@@ -93,7 +100,7 @@ export function LabelManagement() {
     })
   }
 
-  const handleUpdateRelationship = (id, updatedData) => {
+  const handleUpdateRelationship = (id: string, updatedData: Partial<RelationshipType>) => {
     setRelationshipTypes(relationshipTypes.map((rel) => (rel.id === id ? { ...rel, ...updatedData } : rel)))
     setEditingRelationshipId(null)
 
@@ -103,7 +110,7 @@ export function LabelManagement() {
     })
   }
 
-  const handleDeleteRelationship = (id) => {
+  const handleDeleteRelationship = (id: string) => {
     setRelationshipTypes(relationshipTypes.filter((rel) => rel.id !== id))
 
     toast({
@@ -178,15 +185,17 @@ export function LabelManagement() {
                       <Button
                         size="sm"
                         onClick={() => {
-                          const nameInput = document.getElementById(`edit-name-${label.id}`)
-                          const colorInput = document.getElementById(`edit-color-${label.id}`)
-                          const descInput = document.getElementById(`edit-desc-${label.id}`)
+                          const nameInput = document.getElementById(`edit-name-${label.id}`) as HTMLInputElement
+                          const colorInput = document.getElementById(`edit-color-${label.id}`) as HTMLInputElement
+                          const descInput = document.getElementById(`edit-desc-${label.id}`) as HTMLTextAreaElement
 
-                          handleUpdateLabel(label.id, {
-                            name: nameInput.value,
-                            color: colorInput.value,
-                            description: descInput.value,
-                          })
+                          if (nameInput && colorInput && descInput) {
+                            handleUpdateLabel(label.id, {
+                              name: nameInput.value,
+                              color: colorInput.value,
+                              description: descInput.value,
+                            })
+                          }
                         }}
                       >
                         <Save className="mr-2 h-3 w-3" /> Save
@@ -204,7 +213,7 @@ export function LabelManagement() {
         <CreateLabelDialog
           open={isCreateLabelDialogOpen}
           onOpenChange={setIsCreateLabelDialogOpen}
-          onAddLabel={handleAddLabel}
+          onCreateLabel={handleAddLabel}
         />
       </TabsContent>
 

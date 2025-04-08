@@ -13,35 +13,31 @@ const handler = NextAuth({
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
     }),
     CredentialsProvider({
-      name: 'credentials',
+      name: 'Credentials',
       credentials: {
-        email: { label: 'Email', type: 'email' },
-        password: { label: 'Password', type: 'password' },
+        username: { label: 'Username', type: 'text' },
+        password: { label: 'Password', type: 'password' }
       },
       async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password) {
-          throw new Error('Invalid credentials')
+        // This is a temporary mock user for development
+        if (credentials?.username === 'admin' && credentials?.password === 'admin') {
+          return {
+            id: '1',
+            name: 'Admin User',
+            email: 'admin@example.com',
+            role: 'admin'
+          }
         }
-
-        const user = await prisma.user.findUnique({
-          where: { email: credentials.email },
-        })
-
-        if (!user || !user.password) {
-          throw new Error('Invalid credentials')
+        if (credentials?.username === 'user' && credentials?.password === 'user') {
+          return {
+            id: '2',
+            name: 'Regular User',
+            email: 'user@example.com',
+            role: 'user'
+          }
         }
-
-        const isCorrectPassword = await bcrypt.compare(
-          credentials.password,
-          user.password
-        )
-
-        if (!isCorrectPassword) {
-          throw new Error('Invalid credentials')
-        }
-
-        return user
-      },
+        return null
+      }
     }),
   ],
   session: {
@@ -49,9 +45,8 @@ const handler = NextAuth({
   },
   callbacks: {
     async session({ session, token }) {
-      if (session.user) {
-        session.user.id = token.sub!
-        session.user.role = token.role as string
+      if (session?.user) {
+        session.user.role = token.role
       }
       return session
     },
@@ -63,7 +58,7 @@ const handler = NextAuth({
     },
   },
   pages: {
-    signIn: '/auth/signin',
+    signIn: '/auth/login',
   },
 })
 

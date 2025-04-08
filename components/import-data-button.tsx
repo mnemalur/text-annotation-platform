@@ -17,7 +17,7 @@ import { Label } from "@/components/ui/label"
 import { useToast } from "@/components/ui/use-toast"
 import { FileUp, Upload } from "lucide-react"
 
-export function ImportDataButton() {
+export default function ImportDataButton() {
   const [open, setOpen] = useState(false)
   const [importTab, setImportTab] = useState("paste")
   const [pastedText, setPastedText] = useState("")

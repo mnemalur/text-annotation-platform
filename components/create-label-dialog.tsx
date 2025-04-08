@@ -1,99 +1,64 @@
 "use client"
 
 import { useState } from "react"
-import { Button } from "@/components/ui/button"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
+import { Input } from "@/components/ui/input"
+import { Button } from "@/components/ui/button"
+import { Label as LabelType } from "@/types/annotation"
 
-export function CreateLabelDialog({ open, onOpenChange, onAddLabel }) {
-  const [labelName, setLabelName] = useState("")
-  const [labelColor, setLabelColor] = useState("#3B82F6")
-  const [labelDescription, setLabelDescription] = useState("")
+interface CreateLabelDialogProps {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  onCreateLabel: (label: LabelType) => void
+}
 
-  const handleSubmit = (e) => {
+export default function CreateLabelDialog({ open, onOpenChange, onCreateLabel }: CreateLabelDialogProps) {
+  const [name, setName] = useState("")
+  const [color, setColor] = useState("#FF0000")
+
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    onAddLabel({
-      name: labelName,
-      color: labelColor,
-      description: labelDescription,
-    })
-
-    // Reset form
-    setLabelName("")
-    setLabelColor("#3B82F6")
-    setLabelDescription("")
+    if (name.trim()) {
+      onCreateLabel({
+        id: `label-${Date.now()}`,
+        name: name.trim(),
+        color,
+      })
+      setName("")
+      setColor("#FF0000")
+    }
   }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[425px]">
+      <DialogContent>
         <DialogHeader>
-          <DialogTitle>Create new label</DialogTitle>
-          <DialogDescription>
-            Add a new label for annotating text. Labels can be used to mark entities, concepts, or other elements in
-            text.
-          </DialogDescription>
+          <DialogTitle>Create New Label</DialogTitle>
         </DialogHeader>
-        <form onSubmit={handleSubmit}>
-          <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="name" className="text-right">
-                Name
-              </Label>
-              <Input
-                id="name"
-                value={labelName}
-                onChange={(e) => setLabelName(e.target.value)}
-                className="col-span-3"
-                required
-              />
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="color" className="text-right">
-                Color
-              </Label>
-              <div className="col-span-3 flex items-center gap-2">
-                <Input
-                  id="color"
-                  type="color"
-                  value={labelColor}
-                  onChange={(e) => setLabelColor(e.target.value)}
-                  className="w-12 h-8 p-1"
-                />
-                <Input
-                  value={labelColor}
-                  onChange={(e) => setLabelColor(e.target.value)}
-                  className="flex-1"
-                  pattern="^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$"
-                  placeholder="#HEX"
-                />
-              </div>
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="description" className="text-right">
-                Description
-              </Label>
-              <Textarea
-                id="description"
-                value={labelDescription}
-                onChange={(e) => setLabelDescription(e.target.value)}
-                className="col-span-3"
-                placeholder="What kind of text should be labeled with this?"
-              />
-            </div>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="name">Label Name</Label>
+            <Input
+              id="name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Enter label name"
+              required
+            />
           </div>
-          <DialogFooter>
-            <Button type="submit">Create label</Button>
-          </DialogFooter>
+          <div className="space-y-2">
+            <Label htmlFor="color">Color</Label>
+            <Input
+              id="color"
+              type="color"
+              value={color}
+              onChange={(e) => setColor(e.target.value)}
+            />
+          </div>
+          <Button type="submit" className="w-full">
+            Create Label
+          </Button>
         </form>
       </DialogContent>
     </Dialog>
