@@ -1,302 +1,253 @@
 "use client"
 
-import { useRef } from "react"
+import { useRef, memo, useMemo, useCallback } from "react"
 import { Badge } from "@/components/ui/badge"
 import { AnnotationLegend } from "@/components/annotation-legend"
 import { Button } from "@/components/ui/button"
 import { X } from "lucide-react"
+import { cn } from "@/lib/utils"
+
+interface Annotation {
+  id: string
+  text: string
+  range: {
+    start: number
+    end: number
+  }
+  tokenStart: number
+  tokenEnd: number
+  labelId: string
+  labelName: string
+  color: string
+}
+
+interface TextSelection {
+  text: string
+  range: {
+    start: number
+    end: number
+  }
+  tokenStart: number
+  tokenEnd: number
+}
+
+interface TextDocumentProps {
+  content: string
+  annotations: Annotation[]
+  selectedText: TextSelection | null
+  isReviewMode: boolean
+  onTextSelect: (text: string, range: { start: number; end: number }, tokenStart: number, tokenEnd: number) => void
+  onRemoveAnnotation: (id: string) => void
+  className?: string
+}
 
 export function TextDocument({
   content,
   annotations,
-  onTextSelect,
   selectedText,
-  isReviewMode = false,
+  isReviewMode,
+  onTextSelect,
   onRemoveAnnotation,
-}) {
-  const textRef = useRef(null)
+  className
+}: TextDocumentProps) {
+  const containerRef = useRef<HTMLDivElement>(null)
 
-  // Helper function to find word boundaries
-  const findWordBoundaries = (text, start, end) => {
-    // Find the start of the word
-    let wordStart = start
-    while (wordStart > 0 && /\w/.test(text[wordStart - 1])) {
-      wordStart--
-    }
-
-    // Find the end of the word
-    let wordEnd = end
-    while (wordEnd < text.length && /\w/.test(text[wordEnd])) {
-      wordEnd++
-    }
-
-    return { start: wordStart, end: wordEnd }
-  }
-
-  const handleTextSelection = () => {
-    if (isReviewMode) return // Disable selection in review mode
-
+  const handleTextSelection = useCallback(() => {
     const selection = window.getSelection()
-    if (selection.toString().trim().length > 0 && textRef.current.contains(selection.anchorNode)) {
-      const range = selection.getRangeAt(0)
+    if (!selection || selection.rangeCount === 0) return
 
-      // Calculate the start and end positions within the entire text
-      const preSelectionRange = range.cloneRange()
-      preSelectionRange.selectNodeContents(textRef.current)
-      preSelectionRange.setEnd(range.startContainer, range.startOffset)
-      const start = preSelectionRange.toString().length
+    const range = selection.getRangeAt(0)
+    const container = containerRef.current
 
-      const selectedTextContent = selection.toString()
-      const end = start + selectedTextContent.length
+    if (!container || !range) return
+    if (!container.contains(range.commonAncestorContainer)) return
 
-      // Expand selection to word boundaries if it's a partial word
-      const expandedBoundaries = findWordBoundaries(content, start, end)
+    // Get the text content before the selection to calculate the character offset
+    const preSelectionRange = range.cloneRange()
+    preSelectionRange.selectNodeContents(container)
+    preSelectionRange.setEnd(range.startContainer, range.startOffset)
+    const start = preSelectionRange.toString().length
 
-      // Get the expanded text
-      const expandedText = content.substring(expandedBoundaries.start, expandedBoundaries.end)
+    const text = selection.toString().trim()
+    if (!text) return
 
-      // Calculate token positions (for ML model comparison)
-      // This is a simple implementation - in a real app, you might use a more sophisticated tokenizer
-      const tokens = content.substring(0, expandedBoundaries.start).split(/\s+/).length
-      const tokenEnd = tokens + expandedText.split(/\s+/).length - 1
+    // Adjust selection to word boundaries for more precise selection
+    const words = text.split(/\s+/)
+    const firstWord = words[0]
+    const lastWord = words[words.length - 1]
+    
+    // Find exact word boundaries in the original content
+    const contentBeforeSelection = content.substring(0, start)
+    const wordStart = contentBeforeSelection.lastIndexOf(' ') + 1
+    const selectionContext = content.substring(start - 20, start + text.length + 20)
+    const exactText = selectionContext.match(new RegExp(`\\b${firstWord}\\b.*\\b${lastWord}\\b`))
 
-      onTextSelect(expandedText, {
-        start: expandedBoundaries.start,
-        end: expandedBoundaries.end,
-        tokenStart: tokens,
-        tokenEnd: tokenEnd,
-      })
+    if (exactText) {
+      const adjustedStart = wordStart
+      const adjustedText = exactText[0].trim()
+      const adjustedEnd = adjustedStart + adjustedText.length
 
-      // Update the visual selection to match the expanded word boundaries
-      if (expandedBoundaries.start !== start || expandedBoundaries.end !== end) {
-        // Only modify the selection if it changed
-        const newRange = document.createRange()
+      // Calculate token positions based on word boundaries
+      const preText = content.substring(0, adjustedStart)
+      const tokenStart = preText.split(/\s+/).length
+      const tokenEnd = tokenStart + adjustedText.split(/\s+/).length - 1
 
-        // Find the text node and position for the start
-        let currentPos = 0
-        let startNode = null
-        let startOffset = 0
-
-        // Find the text node and position for the end
-        let endNode = null
-        let endOffset = 0
-
-        // Helper function to traverse nodes and find positions
-        const findPositionInNodes = (node) => {
-          if (node.nodeType === Node.TEXT_NODE) {
-            const nodeLength = node.nodeValue.length
-
-            // Check if start position is in this node
-            if (startNode === null && currentPos + nodeLength >= expandedBoundaries.start) {
-              startNode = node
-              startOffset = expandedBoundaries.start - currentPos
-            }
-
-            // Check if end position is in this node
-            if (currentPos + nodeLength >= expandedBoundaries.end) {
-              endNode = node
-              endOffset = expandedBoundaries.end - currentPos
-              return true // Found both positions
-            }
-
-            currentPos += nodeLength
-          } else {
-            // Traverse child nodes
-            for (let i = 0; i < node.childNodes.length; i++) {
-              if (findPositionInNodes(node.childNodes[i])) {
-                return true
-              }
-            }
-          }
-          return false
-        }
-
-        findPositionInNodes(textRef.current)
-
-        // If we found both positions, update the selection
-        if (startNode && endNode) {
-          newRange.setStart(startNode, startOffset)
-          newRange.setEnd(endNode, endOffset)
-
-          selection.removeAllRanges()
-          selection.addRange(newRange)
-        }
-      }
+      onTextSelect(adjustedText, { start: adjustedStart, end: adjustedEnd }, tokenStart, tokenEnd)
     }
-  }
+  }, [content, onTextSelect])
 
-  // Render the content with highlighted annotations
-  const renderContent = () => {
-    if (!content) {
-      return ""
-    }
-
-    // If there are no annotations and no selection, just return the content
-    if (annotations.length === 0 && !selectedText) {
-      return content
-    }
-
-    // Combine annotations with current selection for rendering
-    const allHighlights = [...annotations]
-
-    // Add the current selection as a temporary highlight if it exists and not in review mode
-    if (selectedText && !isReviewMode) {
-      allHighlights.push({
-        id: "current-selection",
-        range: selectedText.range,
-        color: "#FFD700", // Highlight color for current selection
-        labelName: "Current Selection",
-      })
-    }
-
-    // Sort highlights by start position (to handle overlapping)
-    const sortedHighlights = [...allHighlights].sort((a, b) => a.range.start - b.range.start)
-
-    const result = []
+  // Render annotated text with markup
+  const renderAnnotatedText = () => {
     let lastIndex = 0
+    const result = []
+    const sortedAnnotations = [...annotations].sort((a, b) => a.range.start - b.range.start)
 
-    sortedHighlights.forEach((highlight) => {
-      const { start, end } = highlight.range
-
-      // Add text before this highlight
-      if (start > lastIndex) {
-        result.push(content.substring(lastIndex, start))
+    for (const annotation of sortedAnnotations) {
+      // Add text before annotation
+      if (annotation.range.start > lastIndex) {
+        result.push(
+          <span key={`text-${lastIndex}`} className="whitespace-pre-wrap">
+            {content.slice(lastIndex, annotation.range.start)}
+          </span>
+        )
       }
 
-      // Add the highlighted text
-      const isCurrentSelection = highlight.id === "current-selection"
-
+      // Add annotated text with improved styling
       result.push(
         <span
-          key={highlight.id}
-          style={{
-            backgroundColor: isCurrentSelection ? "#FFD70080" : `${highlight.color}30`, // 30/80 is for opacity
-            borderBottom: isCurrentSelection ? "2px dashed #FFD700" : `2px solid ${highlight.color}`,
-            padding: "0 1px",
-            borderRadius: "2px",
-            cursor: isCurrentSelection ? "default" : "help",
-            position: "relative",
+          key={annotation.id}
+          className="relative group inline-block rounded px-1 py-0.5 transition-colors duration-200"
+          style={{ 
+            backgroundColor: `${annotation.color}30`,
+            borderBottom: `2px solid ${annotation.color}`,
           }}
-          title={isCurrentSelection ? "Click a label to annotate this text" : `${highlight.labelName}`}
-          className="group"
-          data-token-start={highlight.tokenStart}
-          data-token-end={highlight.tokenEnd}
-          data-annotation-id={highlight.id}
         >
-          {content.substring(start, end)}
-          {!isCurrentSelection && (
-            <span
-              className="absolute bottom-full left-1/2 transform -translate-x-1/2 bg-black text-white text-xs rounded py-1 px-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-10"
-              style={{ marginBottom: "5px" }}
+          {content.slice(annotation.range.start, annotation.range.end)}
+          {!isReviewMode && (
+            <button
+              onClick={() => onRemoveAnnotation(annotation.id)}
+              className="absolute hidden group-hover:flex items-center justify-center h-5 w-5 rounded-full bg-destructive text-destructive-foreground -top-2 -right-2 shadow-sm"
+              title="Remove annotation"
             >
-              {highlight.labelName}{" "}
-              {highlight.tokenStart !== undefined && `(Tokens: ${highlight.tokenStart}-${highlight.tokenEnd})`}
-              {isReviewMode && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="ml-1 h-4 w-4 bg-red-500 hover:bg-red-600 rounded-full inline-flex items-center justify-center"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    onRemoveAnnotation(highlight.id)
-                  }}
-                >
-                  <X className="h-3 w-3" />
-                </Button>
-              )}
-            </span>
+              <X className="h-3 w-3" />
+            </button>
           )}
-
-          {/* Add a remove button for review mode */}
-          {isReviewMode && !isCurrentSelection && (
-            <Button
-              variant="ghost"
-              size="icon"
-              className="absolute -top-2 -right-2 h-5 w-5 bg-red-500 hover:bg-red-600 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center"
-              onClick={(e) => {
-                e.stopPropagation()
-                onRemoveAnnotation(highlight.id)
-              }}
-            >
-              <X className="h-3 w-3 text-white" />
-            </Button>
-          )}
-        </span>,
+          <span 
+            className="absolute hidden group-hover:block bottom-full left-1/2 transform -translate-x-1/2 px-2 py-1 bg-popover text-popover-foreground text-xs rounded shadow-lg whitespace-nowrap z-50 mb-1"
+            style={{ borderLeft: `3px solid ${annotation.color}` }}
+          >
+            {annotation.labelName}
+          </span>
+        </span>
       )
 
-      lastIndex = end
-    })
+      lastIndex = annotation.range.end
+    }
 
-    // Add any remaining text
+    // Add remaining text
     if (lastIndex < content.length) {
-      result.push(content.substring(lastIndex))
+      result.push(
+        <span key={`text-${lastIndex}`} className="whitespace-pre-wrap">
+          {content.slice(lastIndex)}
+        </span>
+      )
     }
 
     return result
   }
 
   return (
-    <div className="space-y-4">
-      {isReviewMode && (
-        <div className="bg-yellow-50 border-l-4 border-yellow-400 p-3 rounded-md mb-4">
-          <p className="text-sm font-medium">Review Mode Active</p>
-          <p className="text-xs text-muted-foreground">
-            You can hover over annotations to see details and click the X to remove them.
-          </p>
+    <div className="relative flex flex-col gap-4">
+      {/* Document Section */}
+      <div className="flex flex-col h-full">
+        <div className="bg-muted/50 p-3 rounded-t-md border-b flex items-center justify-between">
+          <div className="text-sm font-medium">Document Annotation</div>
+          {!isReviewMode && selectedText && (
+            <div className="text-sm font-medium text-primary">
+              Text selected - Choose a label →
+            </div>
+          )}
         </div>
-      )}
-
-      <div
-        ref={textRef}
-        className={`text-document p-4 border rounded-md min-h-[300px] whitespace-pre-wrap ${isReviewMode ? "bg-muted/20" : ""}`}
-        onMouseUp={handleTextSelection}
-      >
-        {renderContent()}
+        <div 
+          ref={containerRef}
+          onMouseUp={!isReviewMode ? handleTextSelection : undefined}
+          className={cn(
+            "flex-1 p-4 rounded-b-md border-x border-b bg-card text-card-foreground",
+            "focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
+            "overflow-y-auto selection:bg-primary/30 selection:text-foreground",
+            selectedText && "cursor-pointer",
+            className
+          )}
+          style={{ 
+            minHeight: "500px",
+            maxHeight: "calc(100vh - 20rem)",
+          }}
+        >
+          {renderAnnotatedText()}
+        </div>
       </div>
 
-      {selectedText && !isReviewMode && (
-        <div className="bg-muted p-3 rounded-md border-l-4 border-yellow-400">
-          <p className="text-sm font-medium">
-            Selected text: <span className="font-bold">{selectedText.text}</span>
-          </p>
-          {selectedText.tokenStart !== undefined && (
-            <p className="text-xs text-muted-foreground">
-              Token positions: {selectedText.tokenStart} to {selectedText.tokenEnd}
-            </p>
-          )}
-          <p className="text-xs text-muted-foreground mt-1">Click a label from the sidebar to annotate this text</p>
+      {/* Annotations Summary Card */}
+      <div className="border rounded-lg bg-card">
+        <div className="p-3 border-b bg-muted/50">
+          <h3 className="font-medium text-sm">Annotations Summary</h3>
         </div>
-      )}
+        <div className="p-4">
+          {annotations.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-2">
+              No annotations yet. Start by selecting text and choosing a label.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {annotations.map((annotation) => (
+                <div 
+                  key={annotation.id}
+                  className="flex items-start gap-3 p-2 rounded-md border bg-muted/30"
+                >
+                  <div 
+                    className="w-2 h-2 rounded-full mt-2 flex-shrink-0"
+                    style={{ backgroundColor: annotation.color }}
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium mb-1">{annotation.labelName}</div>
+                    <div className="text-sm text-muted-foreground truncate">
+                      "{annotation.text}"
+                    </div>
+                  </div>
+                  {!isReviewMode && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                      onClick={() => onRemoveAnnotation(annotation.id)}
+                    >
+                      <X className="h-3 w-3" />
+                    </Button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
 
-      {annotations.length > 0 && (
-        <div className="space-y-2">
-          <h3 className="text-sm font-medium">Annotations:</h3>
-          <div className="flex flex-wrap gap-2">
-            {annotations.map((annotation) => (
-              <Badge
-                key={annotation.id}
-                style={{ backgroundColor: annotation.color }}
-                className="text-white group relative"
-              >
-                {annotation.text}: {annotation.labelName}
-                {annotation.tokenStart !== undefined && ` (${annotation.tokenStart}-${annotation.tokenEnd})`}
-                {isReviewMode && (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="ml-1 h-4 w-4 bg-red-500 hover:bg-red-600 rounded-full inline-flex items-center justify-center"
-                    onClick={() => onRemoveAnnotation(annotation.id)}
-                  >
-                    <X className="h-3 w-3 text-white" />
-                  </Button>
-                )}
-              </Badge>
-            ))}
+      {/* Selection Indicator */}
+      {selectedText && (
+        <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-background p-4 rounded-lg shadow-lg border text-sm animate-in fade-in slide-in-from-bottom-4 z-50">
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <span className="font-medium">Selected text:</span>
+              <span className="px-2 py-1 rounded bg-primary/10 border">
+                "{selectedText.text}"
+              </span>
+            </div>
+            <div className="h-4 border-r border-muted" />
+            <div className="text-primary font-medium">
+              Choose a label →
+            </div>
           </div>
         </div>
       )}
-
-      {annotations.length > 0 && <AnnotationLegend annotations={annotations} />}
     </div>
   )
 }
